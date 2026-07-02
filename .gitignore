@@ -1,0 +1,30 @@
+# Python
+venv/
+venv310/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Environment
+.env
+
+# Uploads
+backend/uploads/
+frontend/uploads/
+static/uploads/
+static/audio/
+
+# Database
+*.db
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+backend/venv310/
+backend/venv/
+frontend/node_modules/
