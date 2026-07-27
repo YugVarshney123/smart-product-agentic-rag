@@ -51,6 +51,17 @@ export const downloadProductsPdf = () => {
     "_blank"
   );
 };
+export const cleanWasteBin = async () => {
+  const token = localStorage.getItem("adminToken");
+
+  const res = await axios.delete(`${API_BASE_URL}/api/admin/clean-waste`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return res.data;
+};  
 
 export const vendorScanStock = async (file, stockCount, batchNo) => {
   const token = localStorage.getItem("adminToken");

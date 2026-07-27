@@ -313,6 +313,47 @@ def get_scan_history(admin=Depends(verify_admin)):
 
     db.close()
     return {"scans": data}
+@app.delete("/api/admin/clean-waste")
+def clean_waste(admin=Depends(verify_admin)):
+    from datetime import date
+
+    db = get_db()
+    items = db.query(Inventory).all()
+
+    deleted = 0
+
+    for item in items:
+        try:
+            expiry = item.expiry_date
+
+            if not expiry or expiry == "Not found":
+                continue
+
+            parts = expiry.split("/")
+            if len(parts) != 3:
+                continue
+
+            day = int(parts[0])
+            month = int(parts[1])
+            year = int(parts[2])
+
+            if year < 100:
+                year += 2000
+
+            expiry_date = date(year, month, day)
+
+            if expiry_date < date.today():
+                db.delete(item)
+                deleted += 1
+
+        except Exception as e:
+            print("Skipping invalid expiry:", item.expiry_date, e)
+            continue
+
+    db.commit()
+    db.close()
+
+    return {"message": f"{deleted} expired items removed from waste bin"}
 @app.post("/api/admin/rebuild-rag")
 def rebuild_rag(admin=Depends(verify_admin)):
     rebuild_faiss_index()
@@ -354,3 +395,11 @@ def products_pdf(admin=Depends(verify_admin)):
     db.close()
 
     return FileResponse(pdf_path, filename="products_list.pdf", media_type="application/pdf")
+@app.delete("/api/admin/clear-inventory")
+def clear_inventory(admin=Depends(verify_admin)):
+    db = get_db()
+    deleted = db.query(Inventory).delete()
+    db.commit()
+    db.close()
+
+    return {"message": f"{deleted} inventory items removed"}

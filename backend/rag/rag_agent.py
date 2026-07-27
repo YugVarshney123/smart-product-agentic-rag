@@ -100,4 +100,4 @@ def search_product_knowledge(query, top_k=3):
         "best_match": matches[0] if matches else None,
         "matches": matches
     }
-rebuild_faiss_index()
+rebuild_faiss_index() 

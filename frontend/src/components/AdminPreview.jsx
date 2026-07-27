@@ -6,6 +6,7 @@ import {
 } from "../services/api.js";
 import AdminLogin from "./AdminLogin.jsx";
 
+
 function AdminPreview() {
   const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem("adminToken"));
   const [items, setItems] = useState([]);
@@ -19,17 +20,30 @@ function AdminPreview() {
     try {
       const data = await getInventory();
       setItems(data.items || []);
-    } catch {
+    } catch (error) {
+      console.error(error);
       localStorage.removeItem("adminToken");
       setLoggedIn(false);
     }
   };
+  const handleCleanWaste = async () => {
+  if (!window.confirm("Permanently remove all expired products?")) return;
 
+  try {
+    const data = await cleanWasteBin();
+    alert(data.message);
+    loadInventory();
+  } catch (error) {
+    console.error(error);
+    alert("Failed to clean waste bin");
+  }
+};
   const loadProducts = async () => {
     try {
       const data = await getProducts();
       setProducts(data.products || []);
-    } catch {
+    } catch (error) {
+      console.error(error);
       alert("Unable to load products");
     }
   };
@@ -57,9 +71,11 @@ function AdminPreview() {
     try {
       await vendorScanStock(stockFile, stockCount, batchNo);
       alert("Inventory added successfully");
+
       setStockFile(null);
       setStockCount(1);
       setBatchNo("");
+
       loadInventory();
     } catch (error) {
       console.error(error);
@@ -70,9 +86,14 @@ function AdminPreview() {
   if (!loggedIn) return <AdminLogin onLogin={() => setLoggedIn(true)} />;
 
   const total = items.length;
+  const safeCount = items.filter((i) => getExpiryStatus(i.expiry_date) === "Safe").length;
   const lowStock = items.filter((i) => Number(i.stock_count || 0) <= 5).length;
-  const expired = items.filter((i) => i.expiry_status === "Expired").length;
-  const nearExpiry = items.filter((i) => i.expiry_status === "Near Expiry").length;
+  const expired = items.filter((i) => getExpiryStatus(i.expiry_date) === "Expired").length;
+  const nearExpiry = items.filter((i) => getExpiryStatus(i.expiry_date) === "Near Expiry").length;
+
+  const expiredItems = items.filter(
+    (i) => getExpiryStatus(i.expiry_date) === "Expired"
+  );
 
   return (
     <section className="admin-dashboard">
@@ -84,10 +105,19 @@ function AdminPreview() {
         </div>
 
         <div className="admin-actions">
-          <button className="refresh-btn" onClick={() => { loadInventory(); loadProducts(); }}>
+          <button
+            className="refresh-btn"
+            onClick={() => {
+              loadInventory();
+              loadProducts();
+            }}
+          >
             🔄 Refresh
           </button>
-          <button className="logout-btn" onClick={logout}>Logout</button>
+
+          <button className="logout-btn" onClick={logout}>
+            Logout
+          </button>
         </div>
       </div>
 
@@ -97,6 +127,51 @@ function AdminPreview() {
         <Stat title="Low Stock" value={lowStock} icon="⚠️" />
         <Stat title="Expired" value={expired} icon="❌" />
         <Stat title="Near Expiry" value={nearExpiry} icon="⏳" />
+      </div>
+
+      <div className="waste-full-row">
+        <div className="panel waste-panel">
+          <h3>♻️ Waste Management Workflow</h3>
+
+          <div className="waste-grid">
+            <div className="waste-card safe-card">
+              <h4>🟢 Safe Products</h4>
+              <strong>{safeCount}</strong>
+              <p>Keep in inventory</p>
+            </div>
+
+            <div className="waste-card discount-card">
+              <h4>🟡 Discount Section</h4>
+              <strong>{nearExpiry}</strong>
+              <p>Move near-expiry products to 30% discount section</p>
+            </div>
+
+            <div className="waste-card expired-card">
+              <h4>🔴 Waste Bin</h4>
+              <strong>{expired}</strong>
+              <p>Expired products moved to waste bin</p>
+            </div>
+          </div>
+
+          <div className="waste-list">
+            <h4>🗑 Waste Bin Products</h4>
+
+            {expiredItems.length === 0 ? (
+              <p>No expired products in waste bin.</p>
+            ) : (
+              expiredItems.map((item) => (
+                <div className="waste-item" key={item.id}>
+                  <span>{item.product_name || "Not found"}</span>
+                  <b>{item.expiry_date || "Not found"}</b>
+                </div>
+              ))
+            )}
+          </div>
+
+         <button className="clean-waste-btn" onClick={handleCleanWaste}>
+  🧹 Clean Waste Bin
+</button>
+        </div>
       </div>
 
       <div className="admin-panels">
@@ -173,20 +248,24 @@ function AdminPreview() {
               </thead>
 
               <tbody>
-                {items.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.product_name}</td>
-                    <td>{item.brand}</td>
-                    <td>{item.mrp}</td>
-                    <td>{item.stock_count}</td>
-                    <td>{item.expiry_date}</td>
-                    <td>
-                      <span className={`status ${statusClass(item.expiry_status)}`}>
-                        {item.expiry_status || "Unknown"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {items.map((item) => {
+                  const status = getExpiryStatus(item.expiry_date);
+
+                  return (
+                    <tr key={item.id}>
+                      <td>{item.product_name || "Not found"}</td>
+                      <td>{item.brand || "Not found"}</td>
+                      <td>{item.mrp || "Not found"}</td>
+                      <td>{item.stock_count || 0}</td>
+                      <td>{item.expiry_date || "Not found"}</td>
+                      <td>
+                        <span className={`status ${statusClass(status)}`}>
+                          {status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -215,6 +294,32 @@ function Stat({ title, value, icon }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function getExpiryStatus(expiryDate) {
+  if (!expiryDate || expiryDate === "Not found") return "Unknown";
+
+  const parts = expiryDate.split("/");
+  if (parts.length !== 3) return "Unknown";
+
+  const day = Number(parts[0]);
+  const month = Number(parts[1]) - 1;
+  let year = Number(parts[2]);
+
+  if (!day || month < 0 || !year) return "Unknown";
+  if (year < 100) year += 2000;
+
+  const expiry = new Date(year, month, day);
+  const today = new Date();
+
+  today.setHours(0, 0, 0, 0);
+  expiry.setHours(0, 0, 0, 0);
+
+  const diffDays = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return "Expired";
+  if (diffDays <= 7) return "Near Expiry";
+  return "Safe";
 }
 
 function statusClass(status) {
